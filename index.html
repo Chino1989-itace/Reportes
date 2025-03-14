@@ -32,11 +32,13 @@
         <h2>Panel de Control</h2>
         <button id="logout-btn" class="btn btn-danger mb-3">Cerrar Sesión</button>
         <button id="toggle-mode" class="btn btn-dark">Modo Oscuro/Claro</button>
+        <button id="view-reports-btn" class="btn btn-info">Ver Reportes</button>
 
         <!-- Formulario de Reportes -->
         <div id="report-form">
             <h3>Crear Reporte</h3>
             <input type="text" id="student-name" class="form-control mb-2" placeholder="Nombre del Alumno">
+            <input type="text" id="student-control" class="form-control mb-2" placeholder="Número de Control">
             <select id="report-category" class="form-select mb-2">
                 <option value="Faltas de respeto">Faltas de respeto a la autoridad</option>
                 <option value="Jugar en salón">Jugar en salón</option>
@@ -46,25 +48,34 @@
             <textarea id="report-description" class="form-control mb-2" placeholder="Describe tu problema"></textarea>
             <input type="email" id="student-email" class="form-control mb-2" placeholder="Correo del alumno">
             <input type="text" id="report-teacher" class="form-control mb-2" placeholder="Docente que reporta">
+            
+            <!-- Nuevo campo: Tipo de Reporte -->
+            <select id="report-type" class="form-select mb-2">
+                <option value="Académico">Académico</option>
+                <option value="Conductual">Conductual</option>
+                <option value="Administrativo">Administrativo</option>
+                <option value="Salud">Salud</option>
+            </select>
+
+            <!-- Nuevo campo: Especialidad -->
+            <select id="report-specialty" class="form-select mb-2"></select>
+
             <button id="submit-report" class="btn btn-success">Enviar Reporte</button>
         </div>
 
-        <!-- Listado de Reportes -->
-        <h3 class="mt-5">Listado de Reportes</h3>
-        <select id="filter-category" class="form-select mb-2">
-            <option value="">Todas las categorías</option>
-            <option value="Faltas de respeto">Faltas de respeto a la autoridad</option>
-            <option value="Jugar en salón">Jugar en salón</option>
-            <option value="Cabello largo">Cabello largo</option>
-            <option value="Otro">Otro</option>
-        </select>
-        <div id="report-list" class="mt-3"></div>
+        <!-- Gestión de Especialidades -->
+        <div id="specialties-management" class="mt-4">
+            <h3>Gestión de Especialidades</h3>
+            <input type="text" id="new-specialty" class="form-control mb-2" placeholder="Nueva Especialidad">
+            <button id="add-specialty" class="btn btn-primary">Agregar Especialidad</button>
+            <ul id="specialty-list" class="list-group mt-3"></ul>
+        </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, onSnapshot, updateDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC9uAOgpZw_Xw7sH0pBTlyTjwaQlOX-NQ8",
@@ -80,55 +91,17 @@
         const auth = getAuth();
         const db = getFirestore(app);
 
-        const authContainer = document.getElementById('auth-container');
-        const dashboard = document.getElementById('dashboard');
-
-        document.getElementById('login-btn').addEventListener('click', async () => {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            try {
-                await signInWithEmailAndPassword(auth, email, password);
-            } catch (error) {
-                alert('Error al iniciar sesión: ' + error.message);
-            }
-        });
-
-        document.getElementById('register-btn').addEventListener('click', async () => {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            try {
-                await createUserWithEmailAndPassword(auth, email, password);
-                alert('Usuario registrado con éxito.');
-            } catch (error) {
-                alert('Error al registrar: ' + error.message);
-            }
-        });
-
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                authContainer.classList.add('hidden');
-                dashboard.classList.remove('hidden');
-            } else {
-                authContainer.classList.remove('hidden');
-                dashboard.classList.add('hidden');
-            }
-        });
-
-        document.getElementById('logout-btn').addEventListener('click', async () => {
-            await signOut(auth);
-        });
-
-        document.getElementById('toggle-mode').addEventListener('click', () => {
-            document.body.classList.toggle('dark-mode');
-        });
-
+        // Guardar Reporte
         async function saveReport() {
             const report = {
                 studentName: document.getElementById('student-name').value,
+                studentControl: document.getElementById('student-control').value,
                 category: document.getElementById('report-category').value,
                 description: document.getElementById('report-description').value,
                 studentEmail: document.getElementById('student-email').value,
                 reportTeacher: document.getElementById('report-teacher').value,
+                reportType: document.getElementById('report-type').value,
+                reportSpecialty: document.getElementById('report-specialty').value,
                 status: 'pendiente',
                 createdAt: serverTimestamp()
             };
@@ -137,6 +110,28 @@
         }
 
         document.getElementById('submit-report').addEventListener('click', saveReport);
+
+        // Gestión de Especialidades
+        async function loadSpecialties() {
+            const querySnapshot = await getDocs(collection(db, 'specialties'));
+            const specialtyList = document.getElementById('specialty-list');
+            const specialtySelect = document.getElementById('report-specialty');
+            specialtyList.innerHTML = '';
+            specialtySelect.innerHTML = '';
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                specialtyList.innerHTML += `<li class="list-group-item">${data.name}</li>`;
+                specialtySelect.innerHTML += `<option value="${data.name}">${data.name}</option>`;
+            });
+        }
+
+        document.getElementById('add-specialty').addEventListener('click', async () => {
+            const name = document.getElementById('new-specialty').value;
+            await addDoc(collection(db, 'specialties'), { name });
+            loadSpecialties();
+        });
+
+        loadSpecialties();
     </script>
 </body>
 
